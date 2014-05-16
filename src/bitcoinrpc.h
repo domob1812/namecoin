@@ -6,6 +6,7 @@
 #define BITCOIN_RPC_H
 
 #include "json/json_spirit.h"
+#include <set>
 
 void ThreadRPCServer(void* parg);
 json_spirit::Array RPCConvertValues(const std::string &strMethod, const std::vector<std::string> &strParams);
