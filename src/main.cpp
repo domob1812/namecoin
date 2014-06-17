@@ -898,6 +898,8 @@ void static InvalidChainFound(CBlockIndex* pindexNew)
 bool
 CTransaction::DisconnectInputs (DatabaseSet& dbset, CBlockIndex* pindex)
 {
+    /* FIXME: Implement updating of the UTXO DB.  */
+
     if (!hooks->DisconnectInputs (dbset, *this, pindex))
         return false;
 
@@ -1022,7 +1024,7 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
         int64 nValueIn = 0;
         for (int i = 0; i < vin.size(); i++)
         {
-            COutPoint prevout = vin[i].prevout;
+            const COutPoint prevout = vin[i].prevout;
 
             // Read txindex
             CTxIndex txindex;
@@ -1042,6 +1044,7 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
 
             // Read txPrev
             CTransaction txPrev;
+            CTxOut txoPrev;
             if (!fFound || txindex.pos == CDiskTxPos(1,1,1))
             {
                 // Get prev tx from single transactions in memory
@@ -1050,6 +1053,7 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
                     if (!mapTransactions.count(prevout.hash))
                         return error("ConnectInputs() : %s mapTransactions prev not found %s", GetHash().ToString().substr(0,10).c_str(),  prevout.hash.ToString().substr(0,10).c_str());
                     txPrev = mapTransactions[prevout.hash];
+                    txoPrev = txPrev.vout[prevout.n];
                 }
                 if (!fFound)
                   txindex.ResizeOutputs (txPrev.vout.size ());
@@ -1059,6 +1063,12 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
                 // Get prev tx from disk
                 if (!txPrev.ReadFromDisk(txindex.pos))
                     return error("ConnectInputs() : %s ReadFromDisk prev tx %s failed", GetHash().ToString().substr(0,10).c_str(),  prevout.hash.ToString().substr(0,10).c_str());
+
+                /* Read the UTXO set.  */
+                if (!dbset.utxo ().ReadUtxo (prevout, txoPrev))
+                  return error("ConnectInputs () : %s failed to find prev out %s in UTXO set",
+                               GetHash ().ToString ().substr (0, 10).c_str (),
+                               prevout.ToString ().c_str ());
             }
 
             if (prevout.n >= txPrev.vout.size() || prevout.n >= txindex.GetOutputCount ())
@@ -1095,6 +1105,8 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
             // Write back
             if (fBlock)
             {
+                if (!dbset.utxo ().RemoveUtxo (prevout))
+                    return error ("ConnectInputs() : RemoveUtxo failed");
                 if (!dbset.tx ().UpdateTxIndex (prevout.hash, txindex))
                     return error("ConnectInputs() : UpdateTxIndex failed");
             }
@@ -1125,6 +1137,8 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
     if (fBlock)
     {
         // Add transaction to disk index
+        if (!dbset.utxo ().InsertUtxo (*this))
+            return error ("ConnectInputs() : failed to InsertUtxo");
         if (!dbset.tx ().AddTxIndex (*this, posThisTx, pindexBlock->nHeight))
             return error("ConnectInputs() : AddTxPos failed");
     }

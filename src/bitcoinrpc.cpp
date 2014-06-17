@@ -1693,6 +1693,17 @@ Value listsinceblock(const Array& params, bool fHelp)
     return ret;
 }
 
+Value
+verifyutxo (const Array& params, bool fHelp)
+{
+  if (fHelp || params.size () != 0)
+    throw runtime_error ("verifyutxo\n"
+                         "Verify the UTXO database against the blockchain.\n");
+
+  CUtxoDB db("r");
+  return db.Verify ();
+}
+
 Value gettransaction(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
@@ -3422,6 +3433,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("listunspent",           &listunspent),
     make_pair("listaddressgroupings",  &listaddressgroupings),
     make_pair("listsinceblock",        &listsinceblock),
+    make_pair("verifyutxo",            &verifyutxo),
     make_pair("getrawtransaction",     &getrawtransaction),
     make_pair("createrawtransaction",  &createrawtransaction),
     make_pair("decoderawtransaction",  &decoderawtransaction),
