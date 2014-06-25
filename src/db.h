@@ -448,7 +448,6 @@ public:
        exist, and gives an internal error if it does.  */
     bool InsertUtxo (const COutPoint& pos, const CTxOut& txo);
     bool InsertUtxo (const CTransaction& tx, unsigned n);
-    bool InsertUtxo (const CTransaction& tx);
 
     /* Remove (i. e., mark spent) a given output.  */
     bool RemoveUtxo (const COutPoint& pos);

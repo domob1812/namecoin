@@ -1956,6 +1956,39 @@ int64 GetNameNetFee(const CTransaction& tx)
     return nFee;
 }
 
+/* Check for unspendable script.  nHeight is the height at which the
+   tx output is contained in the blockchain.  */
+bool
+IsUnspendable (const CScript& script, int nHeight)
+{
+  /* An OP_RETURN script as per network fee payments is always
+     unspendable.  Check this.  */
+  if (script.size () == 1 && script[0] == OP_RETURN)
+    return true;
+
+  /* A name_update or name_firstupdate is unspendable if expired.  If
+     the name was already expired at the last checkpoint, consider
+     it thus surely unspendable.  */
+  const int checkpoint = hooks->LockinHeight ();
+  if (checkpoint >= nHeight + GetExpirationDepth (checkpoint))
+    {
+      int op;
+      std::vector<vchType> vvch;
+      if (DecodeNameScript (script, op, vvch))
+        switch (op)
+          {
+          case OP_NAME_FIRSTUPDATE:
+          case OP_NAME_UPDATE:
+            return true;
+
+          default:
+            break;
+          }
+    }
+
+  return false;
+}
+
 bool GetValueOfNameTx(const CTransaction& tx, vector<unsigned char>& value)
 {
     vector<vector<unsigned char> > vvch;

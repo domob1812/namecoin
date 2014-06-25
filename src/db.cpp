@@ -7,6 +7,7 @@
 #include "net.h"
 #include "init.h"
 #include "auxpow.h"
+#include "namecoin.h"
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 
@@ -759,23 +760,16 @@ CUtxoDB::InsertUtxo (const CTransaction& tx, unsigned n)
 }
 
 bool
-CUtxoDB::InsertUtxo (const CTransaction& tx)
-{
-  /* TODO: Calculate tx.GetHash() once instead of for each
-     output in InsertUtxo(CTransaction, unsigned)?  */
-
-  for (unsigned n = 0; n < tx.vout.size (); ++n)
-    if (!InsertUtxo (tx, n))
-      return false;
-
-  return true;
-}
-
-bool
 CUtxoDB::RemoveUtxo (const COutPoint& pos)
 {
+  /* Removing a non-existant entry may happen if the entry is unspendable
+     and thus never inserted, but then removed because the creating transaction
+     is rolled back during DisconnectInputs.  */
   if (!Exists (GetKey (pos)))
-    return error ("Trying to remove non-existant UTXO entry.");
+    {
+      printf ("WARNING: ignored remove of non-existant UTXO entry\n");
+      return true;
+    }
 
   return Erase (GetKey (pos));
 }
@@ -815,6 +809,7 @@ CUtxoDB::InternalRescan (bool fVerify, OutPointSet* outPoints)
   unsigned allTxoCnt = 0;
   unsigned txCnt = 0;
   unsigned txoCnt = 0;
+  unsigned unspendable = 0;
   int64_t amount = 0;
 
   const CBlockIndex* pInd = pindexGenesisBlock;
@@ -851,41 +846,48 @@ CUtxoDB::InternalRescan (bool fVerify, OutPointSet* outPoints)
           bool hasUnspent = false;
           allTxoCnt += tx.vout.size ();
           for (unsigned j = 0; j < tx.vout.size (); ++j)
-            if (!txindex.IsSpent (j))
-              {
-                hasUnspent = true;
-                ++txoCnt;
-                amount += tx.vout[j].nValue;
+            {
+              if (txindex.IsSpent (j))
+                continue;
+              if (IsUnspendable (tx.vout[j].scriptPubKey, pInd->nHeight))
+                {
+                  ++unspendable;
+                  continue;
+                }
 
-                if (fVerify)
-                  {
-                    const COutPoint p(tx.GetHash (), j);
-                    CTxOut txo;
-                    if (!ReadUtxo (p, txo))
-                      {
-                        printf ("Missing %s in UTXO database.\n",
-                                p.ToString ().c_str ());
-                        return error ("UTXO database is incomplete.");
-                      }
-                    if (txo != tx.vout[j])
-                      {
-                        printf ("Mismatch for %s in UTXO database.\n",  
-                                p.ToString ().c_str ());
-                        return error ("UTXO database has wrong entry.");
-                      }
-                    outPoints->insert (p);
-                  }
-                else
-                  {
-                    if (!InsertUtxo (tx, j))
-                      {
-                        printf ("Failed: %s %d (%d in block @%d)\n",
-                                tx.GetHash ().ToString ().c_str (), j,
-                                i, pInd->nHeight);
-                        return error ("InsertUtxo failed.");
-                      }
-                  }
-              }
+              hasUnspent = true;
+              ++txoCnt;
+              amount += tx.vout[j].nValue;
+
+              if (fVerify)
+                {
+                  const COutPoint p(tx.GetHash (), j);
+                  CTxOut txo;
+                  if (!ReadUtxo (p, txo))
+                    {
+                      printf ("Missing %s in UTXO database.\n",
+                              p.ToString ().c_str ());
+                      return error ("UTXO database is incomplete.");
+                    }
+                  if (txo != tx.vout[j])
+                    {
+                      printf ("Mismatch for %s in UTXO database.\n",  
+                              p.ToString ().c_str ());
+                      return error ("UTXO database has wrong entry.");
+                    }
+                  outPoints->insert (p);
+                }
+              else
+                {
+                  if (!InsertUtxo (tx, j))
+                    {
+                      printf ("Failed: %s %d (%d in block @%d)\n",
+                              tx.GetHash ().ToString ().c_str (), j,
+                              i, pInd->nHeight);
+                      return error ("InsertUtxo failed.");
+                    }
+                }
+            }
           if (hasUnspent)
             ++txCnt;
         }
@@ -895,12 +897,13 @@ CUtxoDB::InternalRescan (bool fVerify, OutPointSet* outPoints)
     }
 
   printf ("Finished constructing UTXO.\n"
-          "  # txo:       %d\n"
-          "  # tx:        %d\n"
-          "  # all txo:   %d\n"
-          "  # all tx:    %d\n"
-          "  total coins: %.8f\n",
-          txoCnt, txCnt, allTxoCnt, allTxCnt,
+          "  # txo:         %u\n"
+          "  # tx:          %u\n"
+          "  # all txo:     %u\n"
+          "  # all tx:      %u\n"
+          "  # unspendable: %u\n"
+          "  total coins:   %.8f\n",
+          txoCnt, txCnt, allTxoCnt, allTxCnt, unspendable,
           static_cast<double> (amount) / COIN);
 
   return true;
@@ -966,6 +969,12 @@ CUtxoDB::Verify ()
 
       if (outPoints.find (pos) == outPoints.end ())
         {
+          /* FIXME: When the database is not fully pruned (for instance,
+             after a new checkpoint has been added), it may contain
+             unspendable outputs.  When we have the block height stored
+             in the UTXO DB, we should ignore unspendable outputs
+             and just warn about them instead of an error.  */
+
           printf ("Spuriously in the UTXO DB: %s\n", pos.ToString ().c_str ());
           return error ("UTXO DB contains too many entries.");
         }

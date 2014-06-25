@@ -6,6 +6,7 @@
 #include "net.h"
 #include "init.h"
 #include "auxpow.h"
+#include "namecoin.h"
 #include "cryptopp/sha.h"
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
@@ -1152,11 +1153,22 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
 
     if (fBlock)
     {
+        /* Add newly produced outputs to UTXO set.  Ignore unspendable
+           outputs (due to network fee OP_RETURN).  */
+        /* TODO: Calculate tx.GetHash() once instead of for each
+           output in InsertUtxo(CTransaction, unsigned)?  */
+        for (unsigned i = 0; i < vout.size (); ++i)
+          {
+            if (IsUnspendable (vout[i].scriptPubKey, pindexBlock->nHeight))
+              continue;
+
+            if (!dbset.utxo ().InsertUtxo (*this, i))
+              return error ("ConnectInputs() : failed to InsertUtxo");
+          }
+
         // Add transaction to disk index
-        if (!dbset.utxo ().InsertUtxo (*this))
-            return error ("ConnectInputs() : failed to InsertUtxo");
         if (!dbset.tx ().AddTxIndex (*this, posThisTx, pindexBlock->nHeight))
-            return error("ConnectInputs() : AddTxPos failed");
+          return error("ConnectInputs() : AddTxPos failed");
     }
     else if (fMiner)
     {

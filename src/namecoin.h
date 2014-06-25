@@ -48,6 +48,10 @@ std::string SendMoneyWithInputTx(const CScript& scriptPubKey, int64 nValue, int6
 bool CreateTransactionWithInputTx(const std::vector<std::pair<CScript, int64> >& vecSend, const CWalletTx& wtxIn, int nTxOut, CWalletTx& wtxNew, CReserveKey& reservekey, int64& nFeeRet);
 int64 GetNetworkFee(int nHeight);
 
+/* Check if the given script is surely unspendable when in a block at
+   the given height.  */
+bool IsUnspendable (const CScript& script, int nHeight);
+
 /* Handle the name operation part of the RPC call createrawtransaction.  */
 void AddRawTxNameOperation(CTransaction& tx, const json_spirit::Object& obj);
 
