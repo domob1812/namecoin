@@ -1959,8 +1959,10 @@ int64 GetNameNetFee(const CTransaction& tx)
 /* Check for unspendable script.  nHeight is the height at which the
    tx output is contained in the blockchain.  */
 bool
-IsUnspendable (const CScript& script, int nHeight)
+IsUnspendable (const CTxOut& txo, int nHeight)
 {
+  const CScript& script = txo.scriptPubKey;
+
   /* An OP_RETURN script as per network fee payments is always
      unspendable.  Check this.  */
   if (script.size () == 1 && script[0] == OP_RETURN)

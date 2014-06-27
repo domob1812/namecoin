@@ -1159,7 +1159,7 @@ CTransaction::ConnectInputs (DatabaseSet& dbset,
            output in InsertUtxo(CTransaction, unsigned)?  */
         for (unsigned i = 0; i < vout.size (); ++i)
           {
-            if (IsUnspendable (vout[i].scriptPubKey, pindexBlock->nHeight))
+            if (IsUnspendable (vout[i], pindexBlock->nHeight))
               continue;
 
             if (!dbset.utxo ().InsertUtxo (*this, i))

@@ -849,7 +849,7 @@ CUtxoDB::InternalRescan (bool fVerify, OutPointSet* outPoints)
             {
               if (txindex.IsSpent (j))
                 continue;
-              if (IsUnspendable (tx.vout[j].scriptPubKey, pInd->nHeight))
+              if (IsUnspendable (tx.vout[j], pInd->nHeight))
                 {
                   ++unspendable;
                   continue;
