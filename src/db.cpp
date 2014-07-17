@@ -156,7 +156,8 @@ CDB::Close ()
       unsigned int nMinutes = 2;
       if (strFile == walletPath)
         nMinutes = 0;
-      else if ((strFile == "blkindex.dat" || strFile == "nameindex.dat")
+      else if ((strFile == "blkindex.dat" || strFile == "nameindex.dat"
+                || strFile == "utxo.dat")
                && IsInitialBlockDownload ())
         nMinutes = 5;
 
